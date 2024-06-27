@@ -24,19 +24,22 @@
                 </p-tablist>
                 <p-tabpanels>
                     <p-tabpanel value="0">
-                        <ul>
+                        <ul class="text-base">
                             <hr>
-                            <li v-for="msg in messages">
-                                <div v-html="markdown_render(`**${msg.role}** : ${msg.content}`)"></div>
-                                <hr>
+                            <li v-for="msg in [...messages,ai_message]">
+                                <div v-if="msg.content&&msg.content.length>0">
+                                    <div v-html="history_show(msg)"></div>
+                                    <i class="pi pi-replay" @click="history_repush(msg)"></i>     
+                                    <i class="pi pi-trash" @click="history_remove(msg)"></i>                                    
+                                    <span class="italic text-xs">{{msg.timestamp}}</span>
+                                    <hr>
+                                </div>
                             </li>
-                            <div v-if="ai_message.content.length>0"
-                                v-html="markdown_render(`**${ai_message.role}** : ${ai_message.content}`)"></div>
                         </ul>
                         <br>
                         <hr>
                         <hr><br>
-                        <p-inputtext v-model="message.content" placeholder="Type something for AI..."></p-inputtext>
+                        <p-inputtext v-model="user_message.content" placeholder="Type something for AI..."></p-inputtext>
                         <p-button label="Send" @click="sendmsg"></p-button>
 
                     </p-tabpanel>
@@ -90,36 +93,52 @@
         const { createApp, ref } = Vue;
         const app = createApp({
             setup() {
+                
+                const generateUUID = (prefix='')=>{
+                    return prefix + 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/x/g, function () {
+                        return Math.floor(Math.random() * 16).toString(16);
+                    });
+                }
+
                 const configs = {
-                    darkmode: ref(false),
-                    apikey: ref('sk-'),
-                    sysp: ref('You are a helpful assistant.'),
+                    darkmode:  ref(false),
+                    apikey:    ref('sk-'),
+                    sysp:      ref('You are a helpful assistant.'),
                     modelname: ref('gpt-3.5-turbo'),
-                    sendlast: ref(4),
-                    url: ref('https://api.openai.com/v1/chat/completions'),
+                    sendlast:  ref(4),
+                    url:       ref('https://api.openai.com/v1/chat/completions'),
                 }
                 const markdown_config = window.markdownit({
                     linkify: true, xhtmlOut: true, html: true, breaks: true,
                 });
-                const markdown_render = (msg) => markdown_config.render(msg);
-
-                const message = ref({ role: 'user', content: '' });
+                const user_message    = ref({ role: 'user', content: '' });
                 const ai_message = ref({ role: 'assistant', content: '' });
-                const messages = ref([
-                    // {
-                    //     role: 'assistant',
-                    //     content: "Command was run with root privileges. so it's more obviously now."
-                    // },
-                    // {
-                    //     role: 'user',
-                    //     content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks"
-                    // }
-                ]);
+                const messages   = ref([]);
 
+                const history_remove = (msg)=>{
+                    messages.value = messages.value.filter(m => m.uuid!=msg.uuid);
+                }  
+                           
+                const history_add = (msg)=>{
+                    messages.value.push({ ...msg,timestamp:new Date().toISOString(),uuid:generateUUID()});
+                }
+                // history_add({role: 'assistant',content: "Command was run with root privileges. so it's more obviously now.",});
+                // history_add({role: 'user',content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks",});
+
+                const history_show = (msg) => {
+                    return markdown_config.render(`**${msg.role}** : ${msg.content}`);
+                }
+                
                 const sendmsg = () => {
-                    messages.value.push({ ...message.value })
+                    history_add(user_message.value);
                     openaichat();
                 };
+
+                const history_repush = (msg)=>{
+                    history_remove(msg);
+                    user_message.value.content = msg.content;
+                    sendmsg();
+                }      
 
                 const schemeMode = () => {
                     document.getElementsByTagName('html')[0].classList.toggle('app-dark');
@@ -138,13 +157,15 @@
 
                 const openaibody = () => JSON.stringify({
                     model: configs.modelname.value, stream: true,
-                    messages: [{ role: 'system', content: configs.sysp.value }, ...messages.value.slice(0, parseInt(configs.sendlast.value))],
+                    messages: [{ role: 'system', content: configs.sysp.value }, 
+                    ...messages.value.slice(-parseInt(configs.sendlast.value))
+                    .map(m => {return {role:m.role,content:m.content}})],
                 });
 
                 const openaichat = () => {
                     const body = openaibody();
                     const decoder = new TextDecoder('utf-8');
-                    fetch(configs.url.value, {
+                    return fetch(configs.url.value, {
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${configs.apikey.value}`
@@ -184,7 +205,7 @@
                                                 const json_text = line.replace(/^data:\s*/, '');
                                                 if (json_text === '[DONE]') {
                                                     if (ai_message.value.content.length > 0) {
-                                                        messages.value.push({ ...ai_message.value });
+                                                        history_add(ai_message.value);
                                                         ai_message.value.content = '';
                                                     }
                                                     return;
@@ -207,21 +228,16 @@
                             });
                             return new Response(stream, { headers: { "Content-Type": "text/plain" } }).text();
                         })
-                        .then(result => console.log(result))
                         .catch(e => showError(`Failed to fetch: ${e.message}`));
                 }
-                return { configs, message, ai_message, messages, sendmsg, schemeMode, markdown_render, openaibody };
+                return { configs, user_message, ai_message, messages, sendmsg, schemeMode, showInfo, history_show, history_remove, history_repush, openaibody };
             },
         });
 
         app.use(PrimeVue.Config, {
             theme: {
                 preset: PrimeVue.Themes.Lara,
-                options: {
-                    prefix: 'p',
-                    darkModeSelector: '.app-dark',
-                    cssLayer: false,
-                }
+                options: {prefix: 'p',darkModeSelector: '.app-dark',cssLayer: false,}
             }
         });
         app.use(PrimeVue.ToastService);
