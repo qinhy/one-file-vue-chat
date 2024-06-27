@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>One File Web Chat</title>
+    <link rel="stylesheet" href="https://unpkg.com/primeicons@7.0.0/primeicons.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
+    <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+</head>
+
+<body>
+    <div id="app" class="h-full flex justify-center bg-gray-300">
+        <div class="border border-gray-200 rounded-lg shadow">
+            <p-tabs value="0">
+                <p-tablist>
+                    <p-tab value="0">Home</p-tab>
+                    <p-tab value="1">Config</p-tab>
+                    <p-tab value="2">Help</p-tab>
+                </p-tablist>
+                <p-tabpanels>
+                    <p-tabpanel value="0">
+                        <ul>
+                            <hr>
+                            <li v-for="msg in messages">
+                                <div v-html="markdown_render(`**${msg.role}** : ${msg.content}`)"></div>
+                                <hr>
+                            </li>
+                            <div v-if="ai_message.content.length>0"
+                                v-html="markdown_render(`**${ai_message.role}** : ${ai_message.content}`)"></div>
+                        </ul>
+                        <br>
+                        <hr>
+                        <hr><br>
+                        <p-inputtext v-model="message.content" placeholder="Type something for AI..."></p-inputtext>
+                        <p-button label="Send" @click="sendmsg"></p-button>
+
+                    </p-tabpanel>
+                    <p-tabpanel value="1">
+                        <div class="card">
+                            <label for="switchdarkmode"> Darkmode : </label>
+                            <p-toggleswitch inputId="switchdarkmode" v-model="configs.darkmode.value"
+                                @click="schemeMode" />
+                        </div>
+                        <div class="card">
+                            <label for="apikey"> API Key : </label>
+                            <p-inputtext id="apikey" v-model="configs.apikey.value" placeholder="Enter your API key" />
+                        </div>
+                        <div class="card">
+                            <label for="sysp">System Prompt : </label>
+                            <p-inputtext id="sysp" v-model="configs.sysp.value" placeholder="Enter system prompt" />
+                        </div>
+                        <div class="card">
+                            <label for="modelname"> Model Name : </label>
+                            <p-inputtext id="modelname" v-model="configs.modelname.value"
+                                placeholder="Enter model name" />
+                        </div>
+                        <div class="card">
+                            <label for="sendlast"> Send last messages : </label>
+                            <p-inputnumber id="sendlast" v-model="configs.sendlast.value" mode="decimal" showButtons
+                                :min="0" :max="100" />
+                        </div>
+                        <div class="card">
+                            <label for="url"> API URL : </label>
+                            <p-inputtext id="url" v-model="configs.url.value" placeholder="Enter API URL" />
+                        </div>
+                    </p-tabpanel>
+                    <p-tabpanel value="2">
+                        <div class="card">
+                            <p v-for="conf in Object.entries(configs)">{{conf}}</p>
+                        </div>
+                        <hr>
+                        <div class="card">
+                            {{ openaibody() }}
+                        </div>
+                    </p-tabpanel>
+                </p-tabpanels>
+            </p-tabs>
+        </div>
+
+        <p-toast />
+    </div>
+
+
+    <script>
+        const { createApp, ref } = Vue;
+        const app = createApp({
+            setup() {
+                const configs = {
+                    darkmode: ref(false),
+                    apikey: ref('sk-'),
+                    sysp: ref('You are a helpful assistant.'),
+                    modelname: ref('gpt-3.5-turbo'),
+                    sendlast: ref(4),
+                    url: ref('https://api.openai.com/v1/chat/completions'),
+                }
+                const markdown_config = window.markdownit({
+                    linkify: true, xhtmlOut: true, html: true, breaks: true,
+                });
+                const markdown_render = (msg) => markdown_config.render(msg);
+
+                const message = ref({ role: 'user', content: '' });
+                const ai_message = ref({ role: 'assistant', content: '' });
+                const messages = ref([
+                    // {
+                    //     role: 'assistant',
+                    //     content: "Command was run with root privileges. so it's more obviously now."
+                    // },
+                    // {
+                    //     role: 'user',
+                    //     content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks"
+                    // }
+                ]);
+
+                const sendmsg = () => {
+                    messages.value.push({ ...message.value })
+                    openaichat();
+                };
+
+                const schemeMode = () => {
+                    document.getElementsByTagName('html')[0].classList.toggle('app-dark');
+                }
+
+                const toast = PrimeVue.useToast();
+
+                const showInfo = (msg = 'Info Content', life = 1000) => {
+                    toast.add({ severity: 'info', summary: 'Info', detail: msg, life: life });
+                };
+
+                const showError = (msg = 'Error Content', life = 5000) => {
+                    console.error(msg);
+                    toast.add({ severity: 'error', summary: 'Error', detail: msg, life: life });
+                };
+
+                const openaibody = () => JSON.stringify({
+                    model: configs.modelname.value, stream: true,
+                    messages: [{ role: 'system', content: configs.sysp.value }, ...messages.value.slice(0, parseInt(configs.sendlast.value))],
+                });
+
+                const openaichat = () => {
+                    const body = openaibody();
+                    const decoder = new TextDecoder('utf-8');
+                    fetch(configs.url.value, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${configs.apikey.value}`
+                        }, method: 'POST', body: body
+                    })
+                        .then(response => {
+                            if (!response.ok) { // Checks if the status code is outside of the 2xx range
+                                switch (response.status) {
+                                    case 400: throw new Error('Bad Request: The server could not understand the request.');
+                                    case 401: throw new Error('Unauthorized: Please check your credentials.');
+                                    case 403: throw new Error('Forbidden: You do not have permission to access this resource.');
+                                    case 404: throw new Error('Not Found: The requested resource could not be found.');
+                                    case 429: throw new Error('Too Many Requests: You have reached the rate limit.');
+                                    case 500: throw new Error('Internal Server Error: The server encountered an unexpected condition.');
+                                    case 503: throw new Error('Service Unavailable: The server is currently unable to handle the request.');
+                                    default: throw new Error(`An error occurred: ${response.statusText}`);
+                                }
+                            }
+                            return response.body.getReader();
+                        }
+                        )
+                        .then(reader => {
+                            ai_message.value.content = '';
+                            const stream = new ReadableStream({
+                                start(controller) {
+                                    function push() {
+                                        // Read from the stream
+                                        reader.read().then(({ done, value }) => {
+                                            // When no more data needs to be consumed, close the stream
+                                            if (done) {
+                                                controller.close();
+                                                return;
+                                            }
+                                            const text = decoder.decode(value);
+                                            const lines = text.split(/\n+/);
+                                            for (const line of lines) {
+                                                const json_text = line.replace(/^data:\s*/, '');
+                                                if (json_text === '[DONE]') {
+                                                    if (ai_message.value.content.length > 0) {
+                                                        messages.value.push({ ...ai_message.value });
+                                                        ai_message.value.content = '';
+                                                    }
+                                                    return;
+                                                }
+                                                if (json_text.length == 0) continue;
+                                                const data = JSON.parse(json_text);
+                                                const content = data.choices[0].delta.content;
+                                                if (content) ai_message.value.content += content;
+                                            }
+                                            // Enqueue the next data chunk into our target stream
+                                            controller.enqueue(value);
+                                            push();
+                                        }).catch(e => {
+                                            showError(`${e.message}`);
+                                            controller.error(e);
+                                        });
+                                    }
+                                    push();
+                                }
+                            });
+                            return new Response(stream, { headers: { "Content-Type": "text/plain" } }).text();
+                        })
+                        .then(result => console.log(result))
+                        .catch(e => showError(`Failed to fetch: ${e.message}`));
+                }
+                return { configs, message, ai_message, messages, sendmsg, schemeMode, markdown_render, openaibody };
+            },
+        });
+
+        app.use(PrimeVue.Config, {
+            theme: {
+                preset: PrimeVue.Themes.Lara,
+                options: {
+                    prefix: 'p',
+                    darkModeSelector: '.app-dark',
+                    cssLayer: false,
+                }
+            }
+        });
+        app.use(PrimeVue.ToastService);
+
+        app.directive('ripple', PrimeVue.Ripple);
+
+        app.component('p-button', PrimeVue.Button);
+        app.component('p-inputtext', PrimeVue.InputText);
+        app.component('p-inputnumber', PrimeVue.InputNumber);
+        app.component('p-tabs', PrimeVue.Tabs);
+        app.component('p-tablist', PrimeVue.TabList);
+        app.component('p-tab', PrimeVue.Tab);
+        app.component('p-tabpanels', PrimeVue.TabPanels);
+        app.component('p-tabpanel', PrimeVue.TabPanel);
+        app.component('p-toast', PrimeVue.Toast);
+        app.component('p-panel', PrimeVue.Panel);
+        app.component('p-toggleswitch', PrimeVue.ToggleSwitch);
+
+        app.mount('#app');
+    </script>
+
+</body>
+
+</html>
