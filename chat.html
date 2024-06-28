@@ -14,22 +14,30 @@
 </head>
 
 <body>
-    <div class="bg-gray-300" style="height: 500px;overflow-y: hidden">
-        <div id="app" class="flex justify-center">
+    <!-- GUI Part -->
+    <div class="bg-gray-300">
+        <div id="app">
             <div class="border border-gray-200 rounded-lg shadow">
                 <p-tabs value="0">
                     <p-tablist>
-                        <p-tab v-for="(c,i) in ['Home','Config','Help']" :value="`${i}`">{{c}}</p-tab>
+                        <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
                     </p-tablist>
                     <p-tabpanels>
                         <p-tabpanel value="0">
+                            <div class="card" v-for="c in storage.all_chat()">
+                                <br>
+                                <p-button @click="selected_chat_uuid=c.uuid">{{c.uuid}}</p-button>
+                            </div>
+                        </p-tabpanel>
+
+                        <p-tabpanel value="1">
                             <ul class="text-base">
                                 <hr>
-                                <li v-for="msg in [...messages,ai_message]">
+                                <li v-for="msg in [...storage.get_chat_msgs(selected_chat_uuid).msgs,ai_message]">
                                     <div v-if="msg.content&&msg.content.length>0">
-                                        <div v-html="history_show(msg)"></div>
+                                        <div v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
                                         <i class="pi pi-replay" @click="history_repush(msg)"></i>
-                                        <i class="pi pi-trash" @click="history_remove(msg)"></i>
+                                        <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
                                         <span class="italic text-xs">{{msg.timestamp}}</span>
                                         <hr>
                                     </div>
@@ -43,7 +51,7 @@
                             <p-button label="Send" @click="sendmsg"></p-button>
 
                         </p-tabpanel>
-                        <p-tabpanel value="1">
+                        <p-tabpanel value="2">
                             <div class="card" v-for="config in configs">
                                 <label :for="config.name"> {{config.what}}</label>
                                 <div v-if="config.type=='boolean'"><p-toggleswitch :inputId="config.name"
@@ -56,14 +64,14 @@
                                         v-model="config.val" mode="decimal" showButtons :min="0" :max="100" /></div>
                             </div>
                         </p-tabpanel>
-                        <p-tabpanel value="2">
+                        <p-tabpanel value="3">
                             <div class="card">
                                 <p v-for="conf in configs">{{conf}}</p>
                             </div>
                             <hr>
                             <div class="card">{{ openaibody() }}</div>
                             <hr>
-                            <div class="card">{{ history_dump() }}</div>
+                            <div class="card">{{ storage.get_chat_msgs(selected_chat_uuid) }}</div>
                         </p-tabpanel>
                     </p-tabpanels>
                 </p-tabs>
@@ -72,16 +80,185 @@
         </div>
     </div>
 
+    <!-- Back end storage Part -->   
+    <script>   
+    const { createApp, ref } = Vue; 
+    class SingletonStorageController {
+            add_slave(slave) { this.model.slaves.push(slave); }
+
+            _set_slaves(key, value) {
+                this.model.slaves.forEach(slave => {
+                    if (slave.set) { slave.set(key, value); }
+                });
+            }
+
+            _delete_slaves(key) {
+                this.model.slaves.forEach(slave => {
+                    if (slave.delete) { slave.delete(key); }
+                });
+            }
+
+            exists(key) { console.log(`[${this.constructor.name}]: not implemented`); }
+
+            set(key, value) { console.log(`[${this.constructor.name}]: not implemented`); }
+
+            get(key) { console.log(`[${this.constructor.name}]: not implemented`); }
+
+            delete(key) { console.log(`[${this.constructor.name}]: not implemented`); }
+
+            keys(pattern = '*') { console.log(`[${this.constructor.name}]: not implemented`); }
+
+            clean() { this.keys('*').forEach(k => this.delete(k)); }
+
+            dumps() { var res = {}; this.keys('*').forEach(k => res[k] = this.get(k)); return JSON.stringify(res); }
+
+            loads(jsonString = '{}') { console.log('not implemented'); }
+        }
+
+        class SingletonVueStorage {
+            static _instance = null;
+            static _meta = {};
+
+            constructor() {
+                if (!SingletonVueStorage._instance) {
+                    SingletonVueStorage._instance = this;
+                    this.store = ref({});
+                    this.store.get = ()=>this.store.value;
+                    this.slaves = [];
+                }
+                return SingletonVueStorage._instance;
+            }
+        }
+
+        class SingletonVueStorageController extends SingletonStorageController {
+            constructor(model) {
+                super();
+                this.model = model;
+            }
+
+            exists(key) { return key in this.model.store.get(); }
+
+            set(key, value) {
+                this.model.store.get()[key] = value;
+                this._set_slaves(key, value);
+            }
+
+            get(key) { return this.model.store.get()[key] || null; }
+
+            delete(key) {
+                if (key in this.model.store.get()) { delete this.model.store.get()[key]; }
+                this._delete_slaves(key);
+            }
+
+            keys(pattern = '*') {
+                const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+                return Object.keys(this.model.store.get()).filter(key => key.match(regex));
+            }
+        }
+
+        class SingletonKeyValueStorage extends SingletonStorageController {
+            constructor() {
+                super();
+                this.js_backend();
+            }
+
+            js_backend() { this.client = new SingletonVueStorageController(new SingletonVueStorage()); }
+
+            exists(key) { return this.client.exists(key); }
+            set(key, value) { this.client.set(key, value); }
+            get(key) { return this.client.get(key); }
+            delete(key) { this.client.delete(key); }
+            keys(pattern = '*') { return this.client.keys(pattern); }
+            clean() { this.client.clean(); }
+            dump(jsonPath) { this.client.dump(jsonPath); }
+            load(jsonPath) { this.client.load(jsonPath); }
+            dumps() { return this.client.dumps(); }
+            loads(jsonStr) { this.client.loads(jsonStr); }
+        }
+        // Tests for SingletonKeyValueStorage
+        (async () => {
+            console.log("Testing SingletonKeyValueStorage...");
+
+            const storage = new SingletonKeyValueStorage();
+
+            // Test 1: Set and Get
+            storage.set('key1', { data: 'value1' });
+            const value1 = storage.get('key1');
+            console.assert(JSON.stringify(value1) === JSON.stringify({ data: 'value1' }), 'Test 1 Failed: Set or Get does not work correctly');
+
+            // Test 2: Exists
+            const exists1 = storage.exists('key1');
+            const exists2 = storage.exists('key2');
+            console.assert(exists1 === true, 'Test 2 Failed: Exists does not return true for existing key');
+            console.assert(exists2 === false, 'Test 2 Failed: Exists does not return false for non-existing key');
+
+            // Test 3: Delete
+            storage.delete('key1');
+            const valueAfterDelete = storage.get('key1');
+            console.assert(valueAfterDelete === null, 'Test 3 Failed: Delete does not remove the key properly');
+
+            // Test 4: Keys
+            storage.set('test1', { data: '123' });
+            storage.set('test2', { data: '456' });
+            storage.set('something', { data: '789' });
+            const keys = storage.keys('test*');
+            console.assert(keys.includes('test1') && keys.includes('test2') && keys.length === 2, 'Test 4 Failed: Keys does not filter correctly');
+
+            // Test 5: Clean
+            storage.clean();
+            const keysAfterClean = storage.keys('*');
+            console.assert(keysAfterClean.length === 0, 'Test 5 Failed: Clean does not clear all keys');
+
+            console.log("All tests completed.");
+        })();
+    </script>
+
+    <!-- main Part -->   
     <script>
-        const { createApp, ref } = Vue;
-        const app = createApp({
-            setup() {
-                const gen_uuid = (prefix = '') => {
+        const storage = new SingletonKeyValueStorage();
+        const gen_uuid = (prefix = '') => {
                     return prefix + 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/x/g, function () {
                         return Math.floor(Math.random() * 16).toString(16);
                     });
                 }
+        const get_now    = ()=>new Date().toISOString();
+        storage.new_chat = ()=>{const uuid=`Chat:${gen_uuid()}`;storage.set(uuid,{title:uuid,msg_uuids:[],timestamp:get_now(),uuid:uuid});return storage.get(uuid)};
+        storage.del_chat = (uuid)=>storage.delete(uuid);
+        storage.get_chat = (uuid)=>storage.get(uuid);
+        storage.get_chat_msgs = (chat_uuid)=>{return {...storage.get_chat(chat_uuid),msgs:storage.all_msgs(chat_uuid)}}
+        storage.all_chat = (uuid)=>{return storage.keys('Chat:*').map(k=>storage.get_chat_msgs(k))};
 
+        storage.get_msg = (uuid)=>storage.get(uuid);
+        storage.add_msg = (chat_uuid,{role,content})=>{
+            const uuid=`Message:${gen_uuid()}`;
+            storage.get_chat(chat_uuid).msg_uuids.push(uuid);
+            storage.set(uuid,{role:role,content:content,timestamp:get_now(),uuid:uuid,chat:chat_uuid});
+        };
+        storage.del_msg = (msg_uuid)=>{
+            const msg=storage.get_msg(msg_uuid);
+            const chat = storage.get_chat(msg.chat);
+            chat.msg_uuids = chat.msg_uuids.filter(m_uuid=>m_uuid!=msg_uuid);
+            storage.delete(msg_uuid);
+        };
+        storage.all_msgs = (chat_uuid)=>{
+            const chat = storage.get_chat(chat_uuid);
+            return chat?chat.msg_uuids.map(m_uuid=>storage.get_msg(m_uuid)):[];
+        };
+
+        /// mock
+        {
+            const chat = storage.new_chat();
+            storage.add_msg(chat.uuid,{role:'user',content:'hi'});
+            storage.add_msg(chat.uuid,{role:'assistant',content:'Yes sir!'});
+        }        
+        {
+            const chat = storage.new_chat();
+            storage.add_msg(chat.uuid,{role:'user',content:'ok'});
+            storage.add_msg(chat.uuid,{role:'assistant',content:'well'});
+        }
+
+        const app = createApp({
+            setup() {
                 const mk_config = (name, val, what, command = () => { }) => {
                     return { name: name, val: val, what: what, command: command, type: typeof (val) };
                 }
@@ -100,24 +277,14 @@
                 const user_message = ref({ role: 'user', content: '' });
                 const ai_message = ref({ role: 'assistant', content: '' });
                 ai_message.get = () => ai_message.value;
-                const messages = ref([]);
 
-                const history_remove = (msg) => {
-                    messages.value = messages.value.filter(m => m.uuid != msg.uuid);
-                }
-                const history_add = (msg) => {
-                    messages.value.push({ ...msg, timestamp: new Date().toISOString(), uuid: gen_uuid() });
-                }
                 const history_dump = () => {
                     return {
                         model: configs.get().modelname.val, stream: true,
                         messages: [{ role: 'system', content: configs.get().sysp.val },
-                        ...messages.value],
+                        ...storage.get_chat_msgs(selected_chat_uuid.value).msgs],
                     }
                 };
-
-                history_add({ role: 'assistant', content: "Command was run with root privileges. so it's more obviously now.", });
-                history_add({ role: 'user', content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks", });
 
                 const markdown_config = window.markdownit({
                     linkify: true, xhtmlOut: true, html: true, breaks: true,
@@ -127,12 +294,12 @@
                 }
 
                 const sendmsg = () => {
-                    history_add(user_message.value);
+                    storage.add_msg(selected_chat_uuid.value,user_message.value);
                     openaichat();
                 };
 
                 const history_repush = (msg) => {
-                    history_remove(msg);
+                    storage.del_msg(msg.uuid)
                     user_message.value.content = msg.content;
                     sendmsg();
                 }
@@ -154,7 +321,7 @@
                                     .map(m => { return { role: m.role, content: m.content } })
                     return JSON.stringify(res);
                 }
-                
+
                 const openaichat = () => {
                     const body = openaibody();
                     const decoder = new TextDecoder('utf-8');
@@ -198,7 +365,7 @@
                                                 const json_text = line.replace(/^data:\s*/, '');
                                                 if (json_text === '[DONE]') {
                                                     if (ai_message.get().content.length > 0) {
-                                                        history_add(ai_message.value);
+                                                        storage.add_msg(selected_chat_uuid.value,ai_message.value);
                                                         ai_message.get().content = '';
                                                     }
                                                     return;
@@ -223,9 +390,11 @@
                         })
                         .catch(e => showError(`Failed to fetch: ${e.message}`));
                 }
+                const selected_chat_uuid = ref(storage.all_chat()[0].uuid);
                 return {
-                    configs, user_message, ai_message, messages,
-                    sendmsg, showInfo, history_show, history_remove, history_repush, history_dump, openaibody
+                    storage, selected_chat_uuid, markdown_config,
+                    configs, user_message, ai_message,
+                    sendmsg, showInfo,  history_repush, history_dump, openaibody
                 };
             },
         });
