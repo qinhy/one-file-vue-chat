@@ -15,25 +15,27 @@
 
 <body>
     <!-- GUI Part -->
-    <div class="bg-gray-300">
+    <div>
         <div id="app">
             <div class="border border-gray-200 rounded-lg shadow">
-                <p-tabs value="0">
+                <p class="text-xl font-bold">{{selected_chat.title}}</p>
+                <p-tabs value="1">
                     <p-tablist>
                         <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
                     </p-tablist>
                     <p-tabpanels>
                         <p-tabpanel value="0">
-                            <div class="card" v-for="c in storage.all_chat()">
-                                <br>
-                                <p-button @click="selected_chat_uuid=c.uuid">{{c.uuid}}</p-button>
+                            <div>
+                                <p-select :options="storage.all_chat().map(c=>[c.title,c.uuid])"
+                                    @change="(e)=>{selected_chat = storage.get_chat(e.value[1])}"
+                                    :placeholder="selected_chat.title" />
                             </div>
                         </p-tabpanel>
 
                         <p-tabpanel value="1">
                             <ul class="text-base">
                                 <hr>
-                                <li v-for="msg in [...storage.get_chat_msgs(selected_chat_uuid).msgs,ai_message]">
+                                <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
                                     <div v-if="msg.content&&msg.content.length>0">
                                         <div v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
                                         <i class="pi pi-replay" @click="history_repush(msg)"></i>
@@ -52,10 +54,11 @@
 
                         </p-tabpanel>
                         <p-tabpanel value="2">
-                            <div class="card" v-for="config in configs">
+                            <div class="card"
+                                v-for="config in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
                                 <label :for="config.name"> {{config.what}}</label>
                                 <div v-if="config.type=='boolean'"><p-toggleswitch :inputId="config.name"
-                                        v-model="config.val" @click="config.command" /></div>
+                                        v-model="config.val" @click="command_darkmode" /></div>
 
                                 <div v-else-if="config.type=='string'"><p-inputtext :id="config.name"
                                         v-model="config.val" /></div>
@@ -66,12 +69,14 @@
                         </p-tabpanel>
                         <p-tabpanel value="3">
                             <div class="card">
-                                <p v-for="conf in configs">{{conf}}</p>
+                                <p
+                                    v-for="conf in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
+                                    {{conf}}</p>
                             </div>
                             <hr>
                             <div class="card">{{ openaibody() }}</div>
                             <hr>
-                            <div class="card">{{ storage.get_chat_msgs(selected_chat_uuid) }}</div>
+                            <div><p-textarea v-model="storage_str" rows="5" cols="40" /></div>
                         </p-tabpanel>
                     </p-tabpanels>
                 </p-tabs>
@@ -80,39 +85,35 @@
         </div>
     </div>
 
-    <!-- Back end storage Part -->   
-    <script>   
-    const { createApp, ref } = Vue; 
-    class SingletonStorageController {
+    <!-- Back end storage Part -->
+    <script>
+        const { createApp, ref, computed } = Vue;
+        class SingletonStorageController {
             add_slave(slave) { this.model.slaves.push(slave); }
-
             _set_slaves(key, value) {
                 this.model.slaves.forEach(slave => {
                     if (slave.set) { slave.set(key, value); }
                 });
             }
-
             _delete_slaves(key) {
                 this.model.slaves.forEach(slave => {
                     if (slave.delete) { slave.delete(key); }
                 });
             }
-
             exists(key) { console.log(`[${this.constructor.name}]: not implemented`); }
-
             set(key, value) { console.log(`[${this.constructor.name}]: not implemented`); }
-
             get(key) { console.log(`[${this.constructor.name}]: not implemented`); }
-
             delete(key) { console.log(`[${this.constructor.name}]: not implemented`); }
-
             keys(pattern = '*') { console.log(`[${this.constructor.name}]: not implemented`); }
-
             clean() { this.keys('*').forEach(k => this.delete(k)); }
-
             dumps() { var res = {}; this.keys('*').forEach(k => res[k] = this.get(k)); return JSON.stringify(res); }
-
-            loads(jsonString = '{}') { console.log('not implemented'); }
+            loads(jsonString = '{}') {
+                this.clean();
+                console.log(this);
+                const data = JSON.parse(jsonString);
+                console.log(data);
+                Object.entries(data).forEach(d => this.set(d[0], d[1]));
+            }
         }
 
         class SingletonVueStorage {
@@ -123,7 +124,7 @@
                 if (!SingletonVueStorage._instance) {
                     SingletonVueStorage._instance = this;
                     this.store = ref({});
-                    this.store.get = ()=>this.store.value;
+                    this.store.get = () => this.store.value;
                     this.slaves = [];
                 }
                 return SingletonVueStorage._instance;
@@ -213,66 +214,72 @@
         })();
     </script>
 
-    <!-- main Part -->   
+    <!-- main Part -->
     <script>
         const storage = new SingletonKeyValueStorage();
         const gen_uuid = (prefix = '') => {
-                    return prefix + 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/x/g, function () {
-                        return Math.floor(Math.random() * 16).toString(16);
-                    });
-                }
-        const get_now    = ()=>new Date().toISOString();
-        storage.new_chat = ()=>{const uuid=`Chat:${gen_uuid()}`;storage.set(uuid,{title:uuid,msg_uuids:[],timestamp:get_now(),uuid:uuid});return storage.get(uuid)};
-        storage.del_chat = (uuid)=>storage.delete(uuid);
-        storage.get_chat = (uuid)=>storage.get(uuid);
-        storage.get_chat_msgs = (chat_uuid)=>{return {...storage.get_chat(chat_uuid),msgs:storage.all_msgs(chat_uuid)}}
-        storage.all_chat = (uuid)=>{return storage.keys('Chat:*').map(k=>storage.get_chat_msgs(k))};
-
-        storage.get_msg = (uuid)=>storage.get(uuid);
-        storage.add_msg = (chat_uuid,{role,content})=>{
-            const uuid=`Message:${gen_uuid()}`;
-            storage.get_chat(chat_uuid).msg_uuids.push(uuid);
-            storage.set(uuid,{role:role,content:content,timestamp:get_now(),uuid:uuid,chat:chat_uuid});
+            return prefix + 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/x/g, function () {
+                return Math.floor(Math.random() * 16).toString(16);
+            });
+        }
+        const get_now = () => new Date().toISOString();
+        storage.new_chat = () => {
+            const uuid = `Chat:${gen_uuid()}`;
+            storage.set(uuid, { title: `Title:${uuid}`, msg_uuids: [], timestamp: get_now(), uuid: uuid });
+            return storage.get(uuid);
         };
-        storage.del_msg = (msg_uuid)=>{
-            const msg=storage.get_msg(msg_uuid);
+        storage.del_chat = (uuid) => storage.delete(uuid);
+        storage.get_chat = (uuid) => storage.get(uuid);
+        storage.get_chat_msgs = (chat_uuid) => { return { msgs: storage.all_msgs(chat_uuid) } }
+        storage.all_chat = (uuid) => { return storage.keys('^Chat:*').map(k => storage.get_chat(k)) };
+
+        storage.get_msg = (uuid) => storage.get(uuid);
+        storage.add_msg = (chat_uuid, { role, content }) => {
+            const uuid = `Message:${gen_uuid()}`;
+            storage.get_chat(chat_uuid).msg_uuids.push(uuid);
+            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid });
+        };
+        storage.del_msg = (msg_uuid) => {
+            const msg = storage.get_msg(msg_uuid);
             const chat = storage.get_chat(msg.chat);
-            chat.msg_uuids = chat.msg_uuids.filter(m_uuid=>m_uuid!=msg_uuid);
+            chat.msg_uuids = chat.msg_uuids.filter(m_uuid => m_uuid != msg_uuid);
             storage.delete(msg_uuid);
         };
-        storage.all_msgs = (chat_uuid)=>{
+        storage.all_msgs = (chat_uuid) => {
             const chat = storage.get_chat(chat_uuid);
-            return chat?chat.msg_uuids.map(m_uuid=>storage.get_msg(m_uuid)):[];
+            return chat ? chat.msg_uuids.map(m_uuid => storage.get_msg(m_uuid)) : [];
         };
 
-        /// mock
+        storage.add_chat_config = (chat_uuid, name, val, what) => {
+            storage.set(`Config:${chat_uuid}:${name}`, { name: name, val: val, what: what, type: typeof (val) });
+            return storage.get_chat_config(chat_uuid, name);
+        }
+        storage.get_chat_config = (chat_uuid, name) => storage.get(`Config:${chat_uuid}:${name}`);
+        storage.get_chat_configs = (chat_uuid) => storage.keys(`^Config:${chat_uuid}:*`).map(k => storage.get(k));
+
+        // first chat
         {
             const chat = storage.new_chat();
-            storage.add_msg(chat.uuid,{role:'user',content:'hi'});
-            storage.add_msg(chat.uuid,{role:'assistant',content:'Yes sir!'});
-        }        
-        {
-            const chat = storage.new_chat();
-            storage.add_msg(chat.uuid,{role:'user',content:'ok'});
-            storage.add_msg(chat.uuid,{role:'assistant',content:'well'});
+            chat.title = 'Hello!';
+            storage.add_msg(chat.uuid, { role: 'user', content: 'hi' });
+            storage.add_msg(chat.uuid, { role: 'assistant', content: "I'm ready to assist you. What do you need help with?" });
+
+            storage.add_chat_config(chat.uuid, 'sysp', 'You are a helpful assistant.', 'System Prompt');
+            storage.add_chat_config(chat.uuid, 'modelname', 'gpt-3.5-turbo', 'Model Name');
+            storage.add_chat_config(chat.uuid, 'sendlast', 4, 'Send last messages');
+            storage.add_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
         }
 
         const app = createApp({
             setup() {
-                const mk_config = (name, val, what, command = () => { }) => {
-                    return { name: name, val: val, what: what, command: command, type: typeof (val) };
-                }
-                const configs = ref([
-                    mk_config('darkmode', false, 'Darkmode',
-                        () => { document.getElementsByTagName('html')[0].classList.toggle('app-dark'); }),
-                    mk_config('apikey', 'sk-', 'API Key'),
-                    mk_config('sysp', 'You are a helpful assistant.', 'System Prompt'),
-                    mk_config('modelname', 'gpt-3.5-turbo', 'Model Name'),
-                    mk_config('sendlast', 4, 'Send last messages'),
-                    mk_config('url', 'https://api.openai.com/v1/chat/completions', 'API URL'),
-                ])
-                configs.get = () => configs.value;
-                configs.get().forEach(c => { configs.value[c.name] = c });
+                const commands = ref({});
+                const selected_chat = ref(storage.all_chat()[0]);
+                selected_chat.get = () => storage.all_chat()[0];
+
+                storage.add_chat_config('Global', 'darkmode', false, 'Darkmode');
+                const command_darkmode = () => document.getElementsByTagName('html')[0].classList.toggle('app-dark');
+
+                const get_config = (name) => storage.get_chat_config(selected_chat.get().uuid, name).val;
 
                 const user_message = ref({ role: 'user', content: '' });
                 const ai_message = ref({ role: 'assistant', content: '' });
@@ -280,23 +287,15 @@
 
                 const history_dump = () => {
                     return {
-                        model: configs.get().modelname.val, stream: true,
-                        messages: [{ role: 'system', content: configs.get().sysp.val },
-                        ...storage.get_chat_msgs(selected_chat_uuid.value).msgs],
+                        model: get_config('modelname'), stream: true,
+                        messages: [{ role: 'system', content: get_config('sysp') },
+                        ...storage.get_chat_msgs(selected_chat.get().uuid).msgs],
                     }
                 };
 
                 const markdown_config = window.markdownit({
                     linkify: true, xhtmlOut: true, html: true, breaks: true,
                 });
-                const history_show = (msg) => {
-                    return markdown_config.render(`**${msg.role}** : ${msg.content}`);
-                }
-
-                const sendmsg = () => {
-                    storage.add_msg(selected_chat_uuid.value,user_message.value);
-                    openaichat();
-                };
 
                 const history_repush = (msg) => {
                     storage.del_msg(msg.uuid)
@@ -315,21 +314,24 @@
                     toast.add({ severity: 'error', summary: 'Error', detail: msg, life: life });
                 };
 
-                const openaibody = () => {
+                const openaibody = (sysp = null) => {
                     const res = history_dump();
-                    res.messages = [res.messages[0], ...res.messages.filter(m => m.timestamp).slice(-parseInt(configs.get().sendlast.val))]
-                                    .map(m => { return { role: m.role, content: m.content } })
+                    if (!sysp) sysp = res.messages[0]
+                    res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
+                        .map(m => { return { role: m.role, content: m.content } })
                     return JSON.stringify(res);
                 }
 
-                const openaichat = () => {
-                    const body = openaibody();
+                storage.add_chat_config('Global', 'apikey', 'sk-', 'API Key');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${storage.get_chat_config('Global', 'apikey').val}`
+                };
+                const openaichat = (target_message = null, sysp = null, at_end = null) => {
+                    if (!target_message) target_message = ai_message;
                     const decoder = new TextDecoder('utf-8');
-                    return fetch(configs.get().url.val, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${configs.get().apikey.val}`
-                        }, method: 'POST', body: body
+                    return fetch(get_config('url'), {
+                        headers: headers, method: 'POST', body: openaibody(sysp)
                     })
                         .then(response => {
                             if (!response.ok) { // Checks if the status code is outside of the 2xx range
@@ -345,10 +347,9 @@
                                 }
                             }
                             return response.body.getReader();
-                        }
-                        )
+                        })
                         .then(reader => {
-                            ai_message.get().content = '';
+                            target_message.get().content = '';
                             const stream = new ReadableStream({
                                 start(controller) {
                                     function push() {
@@ -364,16 +365,17 @@
                                             for (const line of lines) {
                                                 const json_text = line.replace(/^data:\s*/, '');
                                                 if (json_text === '[DONE]') {
-                                                    if (ai_message.get().content.length > 0) {
-                                                        storage.add_msg(selected_chat_uuid.value,ai_message.value);
-                                                        ai_message.get().content = '';
+                                                    if (at_end) at_end();
+                                                    else if (target_message.get().content.length > 0) {
+                                                        storage.add_msg(selected_chat.get().uuid, target_message.get());
+                                                        target_message.get().content = '';
                                                     }
                                                     return;
                                                 }
                                                 if (json_text.length == 0) continue;
                                                 const data = JSON.parse(json_text);
                                                 const content = data.choices[0].delta.content;
-                                                if (content) ai_message.get().content += content;
+                                                if (content) target_message.get().content += content;
                                             }
                                             // Enqueue the next data chunk into our target stream
                                             controller.enqueue(value);
@@ -390,11 +392,25 @@
                         })
                         .catch(e => showError(`Failed to fetch: ${e.message}`));
                 }
-                const selected_chat_uuid = ref(storage.all_chat()[0].uuid);
+
+                const mk_title = () => {
+                    const tmp = {}; tmp.get = () => tmp;
+                    openaichat(tmp, { role: 'system', content: 'Please reply summarizaion of all in 5 words.' }, () => { selected_chat.get().title = tmp.content })
+                }
+
+                const sendmsg = () => {
+                    storage.add_msg(selected_chat.get().uuid, user_message.value);
+                    openaichat();
+                    if (selected_chat.get().msg_uuids.length > 10 && selected_chat.get().title.includes(selected_chat.get().uuid)) mk_title();
+                };
+                const storage_str = computed({
+                    get() { return storage.dumps(); },
+                    set(val) { storage.loads(val) }
+                });
                 return {
-                    storage, selected_chat_uuid, markdown_config,
-                    configs, user_message, ai_message,
-                    sendmsg, showInfo,  history_repush, history_dump, openaibody
+                    storage, storage_str, selected_chat, markdown_config,
+                    user_message, ai_message,
+                    sendmsg, showInfo, history_repush, history_dump, openaibody, get_config, command_darkmode
                 };
             },
         });
@@ -420,6 +436,8 @@
         app.component('p-toast', PrimeVue.Toast);
         app.component('p-panel', PrimeVue.Panel);
         app.component('p-toggleswitch', PrimeVue.ToggleSwitch);
+        app.component('p-select', PrimeVue.Select);
+        app.component('p-textarea', PrimeVue.Textarea);
 
         app.mount('#app');
     </script>
