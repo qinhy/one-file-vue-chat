@@ -154,13 +154,7 @@
                                     .map(m => { return { role: m.role, content: m.content } })
                     return JSON.stringify(res);
                 }
-                JSON.stringify({
-                    model: configs.get().modelname.val, stream: true,
-                    messages: [{ role: 'system', content: configs.get().sysp.val },
-                    ...messages.value.slice(-parseInt(configs.get().sendlast.val))
-                        .map(m => { return { role: m.role, content: m.content } })],
-                });
-
+                
                 const openaichat = () => {
                     const body = openaibody();
                     const decoder = new TextDecoder('utf-8');
