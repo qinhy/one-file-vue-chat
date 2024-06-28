@@ -323,15 +323,15 @@
                 }
 
                 storage.add_chat_config('Global', 'apikey', 'sk-', 'API Key');
-                const headers = {
+                const headers = ()=>{return {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${storage.get_chat_config('Global', 'apikey').val}`
-                };
+                }};
                 const openaichat = (target_message = null, sysp = null, at_end = null) => {
                     if (!target_message) target_message = ai_message;
                     const decoder = new TextDecoder('utf-8');
                     return fetch(get_config('url'), {
-                        headers: headers, method: 'POST', body: openaibody(sysp)
+                        headers: headers(), method: 'POST', body: openaibody(sysp)
                     })
                         .then(response => {
                             if (!response.ok) { // Checks if the status code is outside of the 2xx range
