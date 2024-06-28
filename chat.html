@@ -14,134 +14,127 @@
 </head>
 
 <body>
-    <div id="app" class="h-full flex justify-center bg-gray-300">
-        <div class="border border-gray-200 rounded-lg shadow">
-            <p-tabs value="0">
-                <p-tablist>
-                    <p-tab value="0">Home</p-tab>
-                    <p-tab value="1">Config</p-tab>
-                    <p-tab value="2">Help</p-tab>
-                </p-tablist>
-                <p-tabpanels>
-                    <p-tabpanel value="0">
-                        <ul class="text-base">
+    <div class="bg-gray-300" style="height: 500px;overflow-y: hidden">
+        <div id="app" class="flex justify-center">
+            <div class="border border-gray-200 rounded-lg shadow">
+                <p-tabs value="0">
+                    <p-tablist>
+                        <p-tab v-for="(c,i) in ['Home','Config','Help']" :value="`${i}`">{{c}}</p-tab>
+                    </p-tablist>
+                    <p-tabpanels>
+                        <p-tabpanel value="0">
+                            <ul class="text-base">
+                                <hr>
+                                <li v-for="msg in [...messages,ai_message]">
+                                    <div v-if="msg.content&&msg.content.length>0">
+                                        <div v-html="history_show(msg)"></div>
+                                        <i class="pi pi-replay" @click="history_repush(msg)"></i>
+                                        <i class="pi pi-trash" @click="history_remove(msg)"></i>
+                                        <span class="italic text-xs">{{msg.timestamp}}</span>
+                                        <hr>
+                                    </div>
+                                </li>
+                            </ul>
+                            <br>
                             <hr>
-                            <li v-for="msg in [...messages,ai_message]">
-                                <div v-if="msg.content&&msg.content.length>0">
-                                    <div v-html="history_show(msg)"></div>
-                                    <i class="pi pi-replay" @click="history_repush(msg)"></i>     
-                                    <i class="pi pi-trash" @click="history_remove(msg)"></i>                                    
-                                    <span class="italic text-xs">{{msg.timestamp}}</span>
-                                    <hr>
-                                </div>
-                            </li>
-                        </ul>
-                        <br>
-                        <hr>
-                        <hr><br>
-                        <p-inputtext v-model="user_message.content" placeholder="Type something for AI..."></p-inputtext>
-                        <p-button label="Send" @click="sendmsg"></p-button>
+                            <hr><br>
+                            <p-inputtext v-model="user_message.content"
+                                placeholder="Type something for AI..."></p-inputtext>
+                            <p-button label="Send" @click="sendmsg"></p-button>
 
-                    </p-tabpanel>
-                    <p-tabpanel value="1">
-                        <div class="card">
-                            <label for="switchdarkmode"> Darkmode : </label>
-                            <p-toggleswitch inputId="switchdarkmode" v-model="configs.darkmode.value"
-                                @click="schemeMode" />
-                        </div>
-                        <div class="card">
-                            <label for="apikey"> API Key : </label>
-                            <p-inputtext id="apikey" v-model="configs.apikey.value" placeholder="Enter your API key" />
-                        </div>
-                        <div class="card">
-                            <label for="sysp">System Prompt : </label>
-                            <p-inputtext id="sysp" v-model="configs.sysp.value" placeholder="Enter system prompt" />
-                        </div>
-                        <div class="card">
-                            <label for="modelname"> Model Name : </label>
-                            <p-inputtext id="modelname" v-model="configs.modelname.value"
-                                placeholder="Enter model name" />
-                        </div>
-                        <div class="card">
-                            <label for="sendlast"> Send last messages : </label>
-                            <p-inputnumber id="sendlast" v-model="configs.sendlast.value" mode="decimal" showButtons
-                                :min="0" :max="100" />
-                        </div>
-                        <div class="card">
-                            <label for="url"> API URL : </label>
-                            <p-inputtext id="url" v-model="configs.url.value" placeholder="Enter API URL" />
-                        </div>
-                    </p-tabpanel>
-                    <p-tabpanel value="2">
-                        <div class="card">
-                            <p v-for="conf in Object.entries(configs)">{{conf}}</p>
-                        </div>
-                        <hr>
-                        <div class="card">
-                            {{ openaibody() }}
-                        </div>
-                    </p-tabpanel>
-                </p-tabpanels>
-            </p-tabs>
+                        </p-tabpanel>
+                        <p-tabpanel value="1">
+                            <div class="card" v-for="config in configs">
+                                <label :for="config.name"> {{config.what}}</label>
+                                <div v-if="config.type=='boolean'"><p-toggleswitch :inputId="config.name"
+                                        v-model="config.val" @click="config.command" /></div>
+
+                                <div v-else-if="config.type=='string'"><p-inputtext :id="config.name"
+                                        v-model="config.val" /></div>
+
+                                <div v-else-if="config.type=='number'"><p-inputnumber :id="config.name"
+                                        v-model="config.val" mode="decimal" showButtons :min="0" :max="100" /></div>
+                            </div>
+                        </p-tabpanel>
+                        <p-tabpanel value="2">
+                            <div class="card">
+                                <p v-for="conf in configs">{{conf}}</p>
+                            </div>
+                            <hr>
+                            <div class="card">{{ openaibody() }}</div>
+                            <hr>
+                            <div class="card">{{ history_dump() }}</div>
+                        </p-tabpanel>
+                    </p-tabpanels>
+                </p-tabs>
+            </div>
+            <p-toast />
         </div>
-
-        <p-toast />
     </div>
-
 
     <script>
         const { createApp, ref } = Vue;
         const app = createApp({
             setup() {
-                
-                const generateUUID = (prefix='')=>{
+                const gen_uuid = (prefix = '') => {
                     return prefix + 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/x/g, function () {
                         return Math.floor(Math.random() * 16).toString(16);
                     });
                 }
 
-                const configs = {
-                    darkmode:  ref(false),
-                    apikey:    ref('sk-'),
-                    sysp:      ref('You are a helpful assistant.'),
-                    modelname: ref('gpt-3.5-turbo'),
-                    sendlast:  ref(4),
-                    url:       ref('https://api.openai.com/v1/chat/completions'),
+                const mk_config = (name, val, what, command = () => { }) => {
+                    return { name: name, val: val, what: what, command: command, type: typeof (val) };
                 }
+                const configs = ref([
+                    mk_config('darkmode', false, 'Darkmode',
+                        () => { document.getElementsByTagName('html')[0].classList.toggle('app-dark'); }),
+                    mk_config('apikey', 'sk-', 'API Key'),
+                    mk_config('sysp', 'You are a helpful assistant.', 'System Prompt'),
+                    mk_config('modelname', 'gpt-3.5-turbo', 'Model Name'),
+                    mk_config('sendlast', 4, 'Send last messages'),
+                    mk_config('url', 'https://api.openai.com/v1/chat/completions', 'API URL'),
+                ])
+                configs.get = () => configs.value;
+                configs.get().forEach(c => { configs.value[c.name] = c });
+
+                const user_message = ref({ role: 'user', content: '' });
+                const ai_message = ref({ role: 'assistant', content: '' });
+                ai_message.get = () => ai_message.value;
+                const messages = ref([]);
+
+                const history_remove = (msg) => {
+                    messages.value = messages.value.filter(m => m.uuid != msg.uuid);
+                }
+                const history_add = (msg) => {
+                    messages.value.push({ ...msg, timestamp: new Date().toISOString(), uuid: gen_uuid() });
+                }
+                const history_dump = () => {
+                    return {
+                        model: configs.get().modelname.val, stream: true,
+                        messages: [{ role: 'system', content: configs.get().sysp.val },
+                        ...messages.value],
+                    }
+                };
+
+                history_add({ role: 'assistant', content: "Command was run with root privileges. so it's more obviously now.", });
+                history_add({ role: 'user', content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks", });
+
                 const markdown_config = window.markdownit({
                     linkify: true, xhtmlOut: true, html: true, breaks: true,
                 });
-                const user_message    = ref({ role: 'user', content: '' });
-                const ai_message = ref({ role: 'assistant', content: '' });
-                const messages   = ref([]);
-
-                const history_remove = (msg)=>{
-                    messages.value = messages.value.filter(m => m.uuid!=msg.uuid);
-                }  
-                           
-                const history_add = (msg)=>{
-                    messages.value.push({ ...msg,timestamp:new Date().toISOString(),uuid:generateUUID()});
-                }
-                // history_add({role: 'assistant',content: "Command was run with root privileges. so it's more obviously now.",});
-                // history_add({role: 'user',content: "Any updates on this issue? I'm getting the same error when trying to install devtools. Thanks",});
-
                 const history_show = (msg) => {
                     return markdown_config.render(`**${msg.role}** : ${msg.content}`);
                 }
-                
+
                 const sendmsg = () => {
                     history_add(user_message.value);
                     openaichat();
                 };
 
-                const history_repush = (msg)=>{
+                const history_repush = (msg) => {
                     history_remove(msg);
                     user_message.value.content = msg.content;
                     sendmsg();
-                }      
-
-                const schemeMode = () => {
-                    document.getElementsByTagName('html')[0].classList.toggle('app-dark');
                 }
 
                 const toast = PrimeVue.useToast();
@@ -155,20 +148,26 @@
                     toast.add({ severity: 'error', summary: 'Error', detail: msg, life: life });
                 };
 
-                const openaibody = () => JSON.stringify({
-                    model: configs.modelname.value, stream: true,
-                    messages: [{ role: 'system', content: configs.sysp.value }, 
-                    ...messages.value.slice(-parseInt(configs.sendlast.value))
-                    .map(m => {return {role:m.role,content:m.content}})],
+                const openaibody = () => {
+                    const res = history_dump();
+                    res.messages = [res.messages[0], ...res.messages.filter(m => m.timestamp).slice(-parseInt(configs.get().sendlast.val))]
+                                    .map(m => { return { role: m.role, content: m.content } })
+                    return JSON.stringify(res);
+                }
+                JSON.stringify({
+                    model: configs.get().modelname.val, stream: true,
+                    messages: [{ role: 'system', content: configs.get().sysp.val },
+                    ...messages.value.slice(-parseInt(configs.get().sendlast.val))
+                        .map(m => { return { role: m.role, content: m.content } })],
                 });
 
                 const openaichat = () => {
                     const body = openaibody();
                     const decoder = new TextDecoder('utf-8');
-                    return fetch(configs.url.value, {
+                    return fetch(configs.get().url.val, {
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${configs.apikey.value}`
+                            'Authorization': `Bearer ${configs.get().apikey.val}`
                         }, method: 'POST', body: body
                     })
                         .then(response => {
@@ -188,7 +187,7 @@
                         }
                         )
                         .then(reader => {
-                            ai_message.value.content = '';
+                            ai_message.get().content = '';
                             const stream = new ReadableStream({
                                 start(controller) {
                                     function push() {
@@ -204,16 +203,16 @@
                                             for (const line of lines) {
                                                 const json_text = line.replace(/^data:\s*/, '');
                                                 if (json_text === '[DONE]') {
-                                                    if (ai_message.value.content.length > 0) {
+                                                    if (ai_message.get().content.length > 0) {
                                                         history_add(ai_message.value);
-                                                        ai_message.value.content = '';
+                                                        ai_message.get().content = '';
                                                     }
                                                     return;
                                                 }
                                                 if (json_text.length == 0) continue;
                                                 const data = JSON.parse(json_text);
                                                 const content = data.choices[0].delta.content;
-                                                if (content) ai_message.value.content += content;
+                                                if (content) ai_message.get().content += content;
                                             }
                                             // Enqueue the next data chunk into our target stream
                                             controller.enqueue(value);
@@ -230,14 +229,17 @@
                         })
                         .catch(e => showError(`Failed to fetch: ${e.message}`));
                 }
-                return { configs, user_message, ai_message, messages, sendmsg, schemeMode, showInfo, history_show, history_remove, history_repush, openaibody };
+                return {
+                    configs, user_message, ai_message, messages,
+                    sendmsg, showInfo, history_show, history_remove, history_repush, history_dump, openaibody
+                };
             },
         });
 
         app.use(PrimeVue.Config, {
             theme: {
                 preset: PrimeVue.Themes.Lara,
-                options: {prefix: 'p',darkModeSelector: '.app-dark',cssLayer: false,}
+                options: { prefix: 'p', darkModeSelector: '.app-dark', cssLayer: false, }
             }
         });
         app.use(PrimeVue.ToastService);
