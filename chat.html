@@ -19,7 +19,7 @@
         <div id="app">
             <div class="border border-gray-200 rounded-lg shadow">
                 <p class="text-xl font-bold">{{selected_chat.title}}</p>
-                <p-tabs value="0">
+                <p-tabs value="1">
                     <p-tablist>
                         <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
                     </p-tablist>
@@ -29,9 +29,13 @@
                                 <p-select :options="storage.all_chat().map(c=>[c.title,c.uuid])"
                                     @change="(e)=>{selected_chat = storage.get_chat(e.value[1])}"
                                     :placeholder="selected_chat.title" />
-                            </div>                            
-                            <p-button label="new"></p-button>
-                            <p-button label="delete" ></p-button>
+                            </div>
+                            <p-button label="new"
+                                @click="()=>{selected_chat = storage.get_chat(storage.firstchat(null))}"></p-button>
+                            <p-button label="delete" severity="danger"
+                                @click="()=>{storage.del_chat(selected_chat.uuid);
+                                                const cs = storage.all_chat().map(c=>c.uuid).pop();
+                                                if(cs)selected_chat = storage.get_chat(cs);}"></p-button>
                         </p-tabpanel>
 
                         <p-tabpanel value="1">
@@ -53,6 +57,7 @@
                             <p-inputtext v-model="user_message.content"
                                 placeholder="Type something for AI..."></p-inputtext>
                             <p-button label="Send" @click="sendmsg"></p-button>
+                            <p-fileupload accept="image/*" :maxFileSize="1000000" :auto="true"/>
 
                         </p-tabpanel>
                         <p-tabpanel value="2">
@@ -111,9 +116,7 @@
             dumps() { var res = {}; this.keys('*').forEach(k => res[k] = this.get(k)); return JSON.stringify(res); }
             loads(jsonString = '{}') {
                 this.clean();
-                console.log(this);
                 const data = JSON.parse(jsonString);
-                console.log(data);
                 Object.entries(data).forEach(d => this.set(d[0], d[1]));
             }
         }
@@ -230,7 +233,11 @@
             storage.set(uuid, { title: `Title:${uuid}`, msg_uuids: [], timestamp: get_now(), uuid: uuid });
             return storage.get(uuid);
         };
-        storage.del_chat = (uuid) => storage.delete(uuid);
+        storage.del_chat = (uuid) => { 
+            storage.get_chat(uuid)?.msg_uuids.forEach(m => storage.del_msg(m)); 
+            storage.keys(`^Config:${uuid}:*`).map(k => storage.delete(k));
+            storage.delete(uuid); 
+        }
         storage.get_chat = (uuid) => storage.get(uuid);
         storage.get_chat_msgs = (chat_uuid) => { return { msgs: storage.all_msgs(chat_uuid) } }
         storage.all_chat = (uuid) => { return storage.keys('^Chat:*').map(k => storage.get_chat(k)) };
@@ -259,10 +266,10 @@
         storage.get_chat_config = (chat_uuid, name) => storage.get(`Config:${chat_uuid}:${name}`);
         storage.get_chat_configs = (chat_uuid) => storage.keys(`^Config:${chat_uuid}:*`).map(k => storage.get(k));
 
-        // first chat
-        {
+        storage.firstchat = (title = 'Hello!') => {
             const chat = storage.new_chat();
-            chat.title = 'Hello!';
+            if (title) chat.title = title;
+            else chat.title = chat.uuid;
             storage.add_msg(chat.uuid, { role: 'user', content: 'hi' });
             storage.add_msg(chat.uuid, { role: 'assistant', content: "I'm ready to assist you. What do you need help with?" });
 
@@ -270,7 +277,9 @@
             storage.add_chat_config(chat.uuid, 'modelname', 'gpt-3.5-turbo', 'Model Name');
             storage.add_chat_config(chat.uuid, 'sendlast', 4, 'Send last messages');
             storage.add_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
+            return chat.uuid;
         }
+        storage.firstchat();
 
         const app = createApp({
             setup() {
@@ -281,7 +290,7 @@
                 storage.add_chat_config('Global', 'darkmode', false, 'Darkmode');
                 const command_darkmode = () => document.getElementsByTagName('html')[0].classList.toggle('app-dark');
 
-                const get_config = (name) => storage.get_chat_config(selected_chat.get().uuid, name).val;
+                const get_config = (name) => storage.get_chat_config(selected_chat.get()?.uuid, name)?.val;
 
                 const user_message = ref({ role: 'user', content: '' });
                 const ai_message = ref({ role: 'assistant', content: '' });
@@ -291,7 +300,7 @@
                     return {
                         model: get_config('modelname'), stream: true,
                         messages: [{ role: 'system', content: get_config('sysp') },
-                        ...storage.get_chat_msgs(selected_chat.get().uuid).msgs],
+                        ...storage.get_chat_msgs(selected_chat.get()?.uuid)?.msgs],
                     }
                 };
 
@@ -306,11 +315,9 @@
                 }
 
                 const toast = PrimeVue.useToast();
-
                 const showInfo = (msg = 'Info Content', life = 1000) => {
                     toast.add({ severity: 'info', summary: 'Info', detail: msg, life: life });
                 };
-
                 const showError = (msg = 'Error Content', life = 5000) => {
                     console.error(msg);
                     toast.add({ severity: 'error', summary: 'Error', detail: msg, life: life });
@@ -325,10 +332,12 @@
                 }
 
                 storage.add_chat_config('Global', 'apikey', 'sk-', 'API Key');
-                const headers = ()=>{return {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${storage.get_chat_config('Global', 'apikey').val}`
-                }};
+                const headers = () => {
+                    return {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${storage.get_chat_config('Global', 'apikey').val}`
+                    }
+                };
                 const openaichat = (target_message = null, sysp = null, at_end = null) => {
                     if (!target_message) target_message = ai_message;
                     const decoder = new TextDecoder('utf-8');
@@ -345,7 +354,7 @@
                                     case 429: throw new Error('Too Many Requests: You have reached the rate limit.');
                                     case 500: throw new Error('Internal Server Error: The server encountered an unexpected condition.');
                                     case 503: throw new Error('Service Unavailable: The server is currently unable to handle the request.');
-                                    default:  throw new Error(`An error occurred: ${response.statusText}`);
+                                    default: throw new Error(`An error occurred: ${response.statusText}`);
                                 }
                             }
                             return response.body.getReader();
@@ -397,7 +406,8 @@
 
                 const mk_title = () => {
                     const tmp = {}; tmp.get = () => tmp;
-                    openaichat(tmp, { role: 'system', content: 'Please reply summarizaion of all in 5 words.' }, () => { selected_chat.get().title = tmp.content })
+                    openaichat(tmp, { role: 'system', content: 'Please reply summarizaion of all in 5 words.' },
+                        () => { selected_chat.get().title = tmp.content })
                 }
 
                 const sendmsg = () => {
@@ -440,6 +450,7 @@
         app.component('p-toggleswitch', PrimeVue.ToggleSwitch);
         app.component('p-select', PrimeVue.Select);
         app.component('p-textarea', PrimeVue.Textarea);
+        app.component('p-fileupload', PrimeVue.FileUpload);
 
         app.mount('#app');
     </script>
