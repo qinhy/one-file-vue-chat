@@ -19,7 +19,7 @@
         <div id="app">
             <div class="border border-gray-200 rounded-lg shadow">
                 <p class="text-xl font-bold">{{selected_chat.title}}</p>
-                <p-tabs value="1">
+                <p-tabs value="0">
                     <p-tablist>
                         <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
                     </p-tablist>
@@ -29,7 +29,9 @@
                                 <p-select :options="storage.all_chat().map(c=>[c.title,c.uuid])"
                                     @change="(e)=>{selected_chat = storage.get_chat(e.value[1])}"
                                     :placeholder="selected_chat.title" />
-                            </div>
+                            </div>                            
+                            <p-button label="new"></p-button>
+                            <p-button label="delete" ></p-button>
                         </p-tabpanel>
 
                         <p-tabpanel value="1">
@@ -343,7 +345,7 @@
                                     case 429: throw new Error('Too Many Requests: You have reached the rate limit.');
                                     case 500: throw new Error('Internal Server Error: The server encountered an unexpected condition.');
                                     case 503: throw new Error('Service Unavailable: The server is currently unable to handle the request.');
-                                    default: throw new Error(`An error occurred: ${response.statusText}`);
+                                    default:  throw new Error(`An error occurred: ${response.statusText}`);
                                 }
                             }
                             return response.body.getReader();
