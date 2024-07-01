@@ -252,6 +252,11 @@
             storage.get_chat(chat_uuid).msg_uuids.push(uuid);
             storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid });
         };
+        storage.add_img = (chat_uuid, { role, content }) => {
+            const uuid = `Message:${gen_uuid()}`;
+            storage.get_chat(chat_uuid).msg_uuids.push(uuid);
+            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img:true });
+        };
         storage.del_msg = (msg_uuid) => {
             const msg = storage.get_msg(msg_uuid);
             const chat = storage.get_chat(msg.chat);
@@ -419,7 +424,7 @@
                         const preview = document.getElementById('preview');
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
-                        console.log(base64Only);
+                        storage.add_img(selected_chat.get().uuid, {role:'user',content:base64Only});
                     }
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
