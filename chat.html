@@ -42,7 +42,8 @@
                                 <hr>
                                 <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
                                     <div v-if="msg.content&&msg.content.length>0">
-                                        <div v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
+                                        <div v-if="msg.is_img"><p class="font-bold">{{msg.role}} :</p><img :src="`data:image/jpeg;base64,${msg.content}`"></div>
+                                        <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
                                         <i class="pi pi-replay" @click="history_repush(msg)"></i>
                                         <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
                                         <span class="italic text-xs">{{msg.timestamp}}</span>
@@ -336,7 +337,10 @@
                     const res = history_dump();
                     if (!sysp) sysp = res.messages[0]
                     res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
-                        .map(m => { return { role: m.role, content: m.content } })
+                        .map(m => { return m.is_img?                            
+                            { role: m.role, content: [{type:"image_url",image_url:{url:`data:image/jpeg;base64,${m.content}`}}]}:
+                            { role: m.role, content: m.content }
+                        })
                     return JSON.stringify(res);
                 }
 
@@ -425,6 +429,7 @@
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
                         storage.add_img(selected_chat.get().uuid, {role:'user',content:base64Only});
+                        preview.src="";
                     }
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
