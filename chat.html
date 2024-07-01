@@ -58,10 +58,10 @@
                             <p-button label="Send" @click="sendmsg"></p-button>
                             <div>Image : <p-toggleswitch v-model="image_on" /></div>
                             <div v-if="image_on">
-                                 <input type="file" name="test" onchange="previewFile(this)" accept="image/*">
-                                  <img id="preview">
+                                <input type="file" name="test" onchange="previewFile(this)" accept="image/*">
+                                <img id="preview">
                             </div>
-                                
+
 
                         </p-tabpanel>
                         <p-tabpanel value="2">
@@ -415,7 +415,7 @@
                 }
 
                 const sendmsg = () => {
-                    if(image_on.value){
+                    if (image_on.value) {
                         const preview = document.getElementById('preview');
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
@@ -467,14 +467,14 @@
         app.mount('#app');
     </script>
     <script>
-        function previewFile(hoge){
-        var fileData = new FileReader();
-        fileData.onload = (function() {
-            document.getElementById('preview').src = fileData.result;
-        });
-        fileData.readAsDataURL(hoge.files[0]);
+        function previewFile(hoge) {
+            var fileData = new FileReader();
+            fileData.onload = (function () {
+                document.getElementById('preview').src = fileData.result;
+            });
+            fileData.readAsDataURL(hoge.files[0]);
         }
-        </script>
+    </script>
 </body>
 
 </html>
