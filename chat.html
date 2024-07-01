@@ -32,8 +32,7 @@
                             </div>
                             <p-button label="new"
                                 @click="()=>{selected_chat = storage.get_chat(storage.firstchat(null))}"></p-button>
-                            <p-button label="delete" severity="danger"
-                                @click="()=>{storage.del_chat(selected_chat.uuid);
+                            <p-button label="delete" severity="danger" @click="()=>{storage.del_chat(selected_chat.uuid);
                                                 const cs = storage.all_chat().map(c=>c.uuid).pop();
                                                 if(cs)selected_chat = storage.get_chat(cs);}"></p-button>
                         </p-tabpanel>
@@ -57,7 +56,12 @@
                             <p-inputtext v-model="user_message.content"
                                 placeholder="Type something for AI..."></p-inputtext>
                             <p-button label="Send" @click="sendmsg"></p-button>
-                            <p-fileupload accept="image/*" :maxFileSize="1000000" :auto="true"/>
+                            <div>Image : <p-toggleswitch v-model="image_on" /></div>
+                            <div v-if="image_on">
+                                 <input type="file" name="test" onchange="previewFile(this)" accept="image/*">
+                                  <img id="preview">
+                            </div>
+                                
 
                         </p-tabpanel>
                         <p-tabpanel value="2">
@@ -233,10 +237,10 @@
             storage.set(uuid, { title: `Title:${uuid}`, msg_uuids: [], timestamp: get_now(), uuid: uuid });
             return storage.get(uuid);
         };
-        storage.del_chat = (uuid) => { 
-            storage.get_chat(uuid)?.msg_uuids.forEach(m => storage.del_msg(m)); 
+        storage.del_chat = (uuid) => {
+            storage.get_chat(uuid)?.msg_uuids.forEach(m => storage.del_msg(m));
             storage.keys(`^Config:${uuid}:*`).map(k => storage.delete(k));
-            storage.delete(uuid); 
+            storage.delete(uuid);
         }
         storage.get_chat = (uuid) => storage.get(uuid);
         storage.get_chat_msgs = (chat_uuid) => { return { msgs: storage.all_msgs(chat_uuid) } }
@@ -411,6 +415,13 @@
                 }
 
                 const sendmsg = () => {
+                    if(image_on.value){
+                        const preview = document.getElementById('preview');
+                        const base64Data = preview.src;
+                        const base64Only = base64Data.split(',')[1];
+                        console.log(base64Only);
+                    }
+
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
                     openaichat();
                     if (selected_chat.get().msg_uuids.length > 10 && selected_chat.get().title.includes(selected_chat.get().uuid)) mk_title();
@@ -419,10 +430,11 @@
                     get() { return storage.dumps(); },
                     set(val) { storage.loads(val) }
                 });
+                const image_on = ref(false);
                 return {
-                    storage, storage_str, selected_chat, markdown_config,
+                    storage, storage_str, selected_chat, markdown_config, image_on,
                     user_message, ai_message,
-                    sendmsg, showInfo, history_repush, history_dump, openaibody, get_config, command_darkmode
+                    sendmsg, showInfo, history_repush, history_dump, openaibody, get_config, command_darkmode,
                 };
             },
         });
@@ -454,7 +466,15 @@
 
         app.mount('#app');
     </script>
-
+    <script>
+        function previewFile(hoge){
+        var fileData = new FileReader();
+        fileData.onload = (function() {
+            document.getElementById('preview').src = fileData.result;
+        });
+        fileData.readAsDataURL(hoge.files[0]);
+        }
+        </script>
 </body>
 
 </html>
