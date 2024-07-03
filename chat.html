@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="github-markdown.css">
     <title>One File Web Chat</title>
     <link rel="stylesheet" href="https://unpkg.com/primeicons@7.0.0/primeicons.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,6 +12,16 @@
     <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.6.1/github-markdown.min.css">
+    <style>
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 100px;
+            max-width: 980px;
+            margin: 0px 0px 0px;
+            padding: 15px;
+        }
+    </style>
 </head>
 
 <body>
@@ -42,15 +53,15 @@
                                 <hr>
                                 <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
                                     <div v-if="msg.content&&msg.content.length>0">
-                                        <div v-if="msg.is_img">
-                                            <p class="font-bold">{{msg.role}} :</p><img
-                                                :src="`data:image/jpeg;base64,${msg.content}`">
+                                        <div class="markdown-body">                                                
+                                            <div v-if="msg.is_img"><p class="font-bold">{{msg.role}} :</p><img :src="`data:image/jpeg;base64,${msg.content}`"></div>
+                                            <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
                                         </div>
-                                        <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)">
+                                        <div>
+                                            <i class="pi pi-replay" @click="history_repush(msg)"></i>
+                                            <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
+                                            <span class="italic text-xs">{{msg.timestamp}}</span>
                                         </div>
-                                        <i class="pi pi-replay" @click="history_repush(msg)"></i>
-                                        <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
-                                        <span class="italic text-xs">{{msg.timestamp}}</span>
                                         <hr>
                                     </div>
                                 </li>
@@ -266,7 +277,7 @@
         storage.add_img = (chat_uuid, { role, content }) => {
             const uuid = `Message:${gen_uuid()}`;
             storage.get_chat(chat_uuid).msg_uuids.push(uuid);
-            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img: true });
+            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img:true });
         };
         storage.del_msg = (msg_uuid) => {
             const msg = storage.get_msg(msg_uuid);
@@ -347,10 +358,9 @@
                     const res = history_dump();
                     if (!sysp) sysp = res.messages[0]
                     res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
-                        .map(m => {
-                            return m.is_img ?
-                                { role: m.role, content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${m.content}` } }] } :
-                                { role: m.role, content: m.content }
+                        .map(m => { return m.is_img?                            
+                            { role: m.role, content: [{type:"image_url",image_url:{url:`data:image/jpeg;base64,${m.content}`}}]}:
+                            { role: m.role, content: m.content }
                         })
                     return JSON.stringify(res);
                 }
@@ -439,8 +449,8 @@
                         const preview = document.getElementById('preview');
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
-                        storage.add_img(selected_chat.get().uuid, { role: 'user', content: base64Only });
-                        preview.src = "";
+                        storage.add_img(selected_chat.get().uuid, {role:'user',content:base64Only});
+                        preview.src="";
                     }
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
