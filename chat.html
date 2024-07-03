@@ -42,8 +42,12 @@
                                 <hr>
                                 <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
                                     <div v-if="msg.content&&msg.content.length>0">
-                                        <div v-if="msg.is_img"><p class="font-bold">{{msg.role}} :</p><img :src="`data:image/jpeg;base64,${msg.content}`"></div>
-                                        <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
+                                        <div v-if="msg.is_img">
+                                            <p class="font-bold">{{msg.role}} :</p><img
+                                                :src="`data:image/jpeg;base64,${msg.content}`">
+                                        </div>
+                                        <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)">
+                                        </div>
                                         <i class="pi pi-replay" @click="history_repush(msg)"></i>
                                         <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
                                         <span class="italic text-xs">{{msg.timestamp}}</span>
@@ -80,14 +84,20 @@
                             </div>
                         </p-tabpanel>
                         <p-tabpanel value="3">
+                            <hr>
+                            <p class="font-bold">You Configs</p>
                             <div class="card">
                                 <p
                                     v-for="conf in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
                                     {{conf}}</p>
                             </div>
                             <hr>
+                            <hr>
+                            <p class="font-bold">Data send to Server</p>
                             <div class="card">{{ openaibody() }}</div>
                             <hr>
+                            <hr>
+                            <p class="font-bold">Back end data in JSON, for restore or backup</p>
                             <div><p-textarea v-model="storage_str" rows="5" cols="40" /></div>
                         </p-tabpanel>
                     </p-tabpanels>
@@ -256,7 +266,7 @@
         storage.add_img = (chat_uuid, { role, content }) => {
             const uuid = `Message:${gen_uuid()}`;
             storage.get_chat(chat_uuid).msg_uuids.push(uuid);
-            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img:true });
+            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img: true });
         };
         storage.del_msg = (msg_uuid) => {
             const msg = storage.get_msg(msg_uuid);
@@ -295,7 +305,7 @@
             setup() {
                 const commands = ref({});
                 const selected_chat = ref(storage.all_chat()[0]);
-                selected_chat.get = () => storage.all_chat()[0];
+                selected_chat.get = () => selected_chat.value;
 
                 storage.add_chat_config('Global', 'darkmode', false, 'Darkmode');
                 const command_darkmode = () => document.getElementsByTagName('html')[0].classList.toggle('app-dark');
@@ -337,9 +347,10 @@
                     const res = history_dump();
                     if (!sysp) sysp = res.messages[0]
                     res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
-                        .map(m => { return m.is_img?                            
-                            { role: m.role, content: [{type:"image_url",image_url:{url:`data:image/jpeg;base64,${m.content}`}}]}:
-                            { role: m.role, content: m.content }
+                        .map(m => {
+                            return m.is_img ?
+                                { role: m.role, content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${m.content}` } }] } :
+                                { role: m.role, content: m.content }
                         })
                     return JSON.stringify(res);
                 }
@@ -428,8 +439,8 @@
                         const preview = document.getElementById('preview');
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
-                        storage.add_img(selected_chat.get().uuid, {role:'user',content:base64Only});
-                        preview.src="";
+                        storage.add_img(selected_chat.get().uuid, { role: 'user', content: base64Only });
+                        preview.src = "";
                     }
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
