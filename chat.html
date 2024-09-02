@@ -253,6 +253,14 @@
             });
         }
         const get_now = () => new Date().toISOString();
+
+        if(localStorage.getItem('single-file-vue-chat')){
+            storage.loads(atob(localStorage.getItem('single-file-vue-chat')))
+        }
+        storage.save_local_storage = () => {
+            localStorage.setItem('single-file-vue-chat', btoa(storage.dumps()));
+        }
+
         storage.new_chat = () => {
             const uuid = `Chat:${gen_uuid()}`;
             storage.set(uuid, { title: `Title:${uuid}`, msg_uuids: [], timestamp: get_now(), uuid: uuid });
@@ -309,7 +317,7 @@
             storage.add_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
             return chat.uuid;
         }
-        storage.firstchat();
+        if(storage.all_chat().length==0)storage.firstchat();
 
         const app = createApp({
             setup() {
@@ -502,6 +510,12 @@
         app.component('p-fileupload', PrimeVue.FileUpload);
 
         app.mount('#app');
+
+        // save data every 5s
+        setInterval(() => {
+            storage.save_local_storage();
+        }, 5000);
+
     </script>
     <script>
         function previewFile(hoge) {
