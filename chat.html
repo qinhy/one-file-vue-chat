@@ -359,8 +359,9 @@
                 const selected_chat = ref(storage.all_chat()[0]);
                 selected_chat.get = () => selected_chat.value;
 
-                storage.add_chat_config('Global', 'darkmode', false, 'Darkmode');
+                storage.add_chat_config('Global', 'darkmode', true, 'Darkmode');
                 const command_darkmode = () => document.getElementsByTagName('html')[0].classList.toggle('app-dark');
+                command_darkmode();
 
                 const get_config = (name) => storage.get_chat_config(selected_chat.get()?.uuid, name)?.val;
 
