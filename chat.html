@@ -304,7 +304,7 @@
             storage.add_msg(chat.uuid, { role: 'assistant', content: "I'm ready to assist you. What do you need help with?" });
 
             storage.add_chat_config(chat.uuid, 'sysp', 'You are a helpful assistant.', 'System Prompt');
-            storage.add_chat_config(chat.uuid, 'modelname', 'gpt-3.5-turbo', 'Model Name');
+            storage.add_chat_config(chat.uuid, 'modelname', 'gpt-4o-mini', 'Model Name');
             storage.add_chat_config(chat.uuid, 'sendlast', 4, 'Send last messages');
             storage.add_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
             return chat.uuid;
@@ -454,7 +454,14 @@
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
                     openaichat();
+                    
+                    if (image_on.value) {
+                        image_on.value = false;
+                    }                    
+                    user_message.value.content = '';
+                    
                     if (selected_chat.get().msg_uuids.length > 10 && selected_chat.get().title.includes(selected_chat.get().uuid)) mk_title();
+
                 };
                 const storage_str = computed({
                     get() { return storage.dumps(); },
