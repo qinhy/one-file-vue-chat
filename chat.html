@@ -11,7 +11,8 @@
     <script src="https://unpkg.com/primevue@4.0.0-rc.2/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes@4.0.0-rc.2/umd/lara.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.6.1/github-markdown.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.6.1/github-markdown.min.css">
     <style>
         .markdown-body {
             box-sizing: border-box;
@@ -20,6 +21,14 @@
             margin: 0px 0px 0px;
             padding: 15px;
         }
+
+        .app-dark .markdown-body {
+            /* Inverted colors for dark mode */
+            background-color: #18181B;
+            /* or another dark color */
+            color: white;
+            /* or another light color */
+        }
     </style>
 </head>
 
@@ -27,94 +36,110 @@
     <!-- GUI Part -->
     <div>
         <div id="app">
-            <div class="border border-gray-200 rounded-lg shadow">
-                <p class="text-xl font-bold">{{selected_chat.title}}</p>
-                <p-tabs value="1">
-                    <p-tablist>
-                        <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
-                    </p-tablist>
-                    <p-tabpanels>
-                        <p-tabpanel value="0">
-                            <div>
-                                <p-select :options="storage.all_chat().map(c=>[c.title,c.uuid])"
-                                    @change="(e)=>{selected_chat = storage.get_chat(e.value[1])}"
-                                    :placeholder="selected_chat.title" />
-                            </div>
+            <p class="text-xl font-bold text-center px-4 py-2">
+                {{selected_chat.title}}
+            </p>
+            <p-tabs value="1">                
+                <p-tablist>
+                    <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
+                </p-tablist>
+                <p-tabpanels>
+                    <p-tabpanel value="0">
+                        <div>
+                            <p-select :options="storage.all_chat().map(c=>[c.title,c.uuid])"
+                                @change="(e)=>{selected_chat = storage.get_chat(e.value[1])}"
+                                :placeholder="selected_chat.title" />
+                        </div>
+                        <br>
+                        <div class="space-x-2">
                             <p-button label="new"
                                 @click="()=>{selected_chat = storage.get_chat(storage.firstchat(null))}"></p-button>
                             <p-button label="delete" severity="danger" @click="()=>{storage.del_chat(selected_chat.uuid);
                                                 const cs = storage.all_chat().map(c=>c.uuid).pop();
                                                 if(cs)selected_chat = storage.get_chat(cs);}"></p-button>
-                        </p-tabpanel>
+                        </div>
+                    </p-tabpanel>
 
-                        <p-tabpanel value="1">
-                            <ul class="text-base">
-                                <hr>
-                                <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
-                                    <div v-if="msg.content&&msg.content.length>0">
-                                        <div class="markdown-body">                                                
-                                            <div v-if="msg.is_img"><p class="font-bold">{{msg.role}} :</p><img :src="`data:image/jpeg;base64,${msg.content}`"></div>
-                                            <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)"></div>
-                                        </div>
-                                        <div>
-                                            <i class="pi pi-replay" @click="history_repush(msg)"></i>
-                                            <i class="pi pi-trash" @click="()=>storage.del_msg(msg.uuid)"></i>
-                                            <span class="italic text-xs">{{msg.timestamp}}</span>
-                                        </div>
-                                        <hr>
-                                    </div>
-                                </li>
-                            </ul>
-                            <br>
+                    <p-tabpanel value="1">
+                        <ul class="text-base">
                             <hr>
-                            <hr><br>
-                            <p-inputtext v-model="user_message.content"
+                            <li v-for="msg in [...storage.get_chat_msgs(selected_chat.uuid).msgs,ai_message]">
+                                <div v-if="msg.content&&msg.content.length>0">
+                                    <div class="markdown-body">
+                                        <div v-if="msg.is_img">
+                                            <p class="font-bold">{{msg.role}} :</p><img
+                                                :src="`data:image/jpeg;base64,${msg.content}`">
+                                        </div>
+                                        <div v-else v-html="markdown_config.render(`**${msg.role}** : ${msg.content}`)">
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end">
+                                        <i class="pi pi-replay hover:text-blue-500 hover:scale-110 transition duration-200"
+                                            @click="history_repush(msg)"></i>
+                                        <i class="pi pi-trash pi pi-replay hover:text-blue-500 hover:scale-110 transition duration-200"
+                                            @click="()=>storage.del_msg(msg.uuid)"></i>
+                                        <span class="italic text-xs">{{msg.timestamp}}</span>
+                                    </div>
+                                    <hr>
+                                </div>
+                            </li>
+                        </ul><br>
+                        <hr>
+                        <hr><br>
+
+                        <div class="flex items-center space-x-2 p-2 border border-gray-300 rounded-lg shadow-sm">
+                            <p-inputtext v-model="user_message.content" class="w-full"
                                 placeholder="Type something for AI..."></p-inputtext>
                             <p-button label="Send" @click="sendmsg"></p-button>
-                            <div>Image : <p-toggleswitch v-model="image_on" /></div>
+                        </div>
+
+                        <div class="flex items-center space-x-2 p-2 border border-gray-300 rounded-lg shadow-sm">
+                            <div>
+                                <span class="font-medium">Image:</span>
+                                <p-toggleswitch v-model="image_on" class="ml-2"></p-toggleswitch>
+                            </div>
                             <div v-if="image_on">
                                 <input type="file" name="test" onchange="previewFile(this)" accept="image/*">
                                 <img id="preview">
                             </div>
+                        </div>
 
+                    </p-tabpanel>
+                    <p-tabpanel value="2">
+                        <div class="card"
+                            v-for="config in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
+                            <label :for="config.name"> {{config.what}}</label>
+                            <div v-if="config.type=='boolean'"><p-toggleswitch :inputId="config.name"
+                                    v-model="config.val" @click="command_darkmode" /></div>
 
-                        </p-tabpanel>
-                        <p-tabpanel value="2">
-                            <div class="card"
-                                v-for="config in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
-                                <label :for="config.name"> {{config.what}}</label>
-                                <div v-if="config.type=='boolean'"><p-toggleswitch :inputId="config.name"
-                                        v-model="config.val" @click="command_darkmode" /></div>
+                            <div v-else-if="config.type=='string'"><p-inputtext :id="config.name"
+                                    v-model="config.val" /></div>
 
-                                <div v-else-if="config.type=='string'"><p-inputtext :id="config.name"
-                                        v-model="config.val" /></div>
+                            <div v-else-if="config.type=='number'"><p-inputnumber :id="config.name" v-model="config.val"
+                                    mode="decimal" showButtons :min="0" :max="100" /></div>
+                        </div>
+                    </p-tabpanel>
+                    <p-tabpanel value="3">
+                        <hr>
+                        <p class="font-bold">You Configs</p>
+                        <div class="card">
+                            <p
+                                v-for="conf in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
+                                {{conf}}</p>
+                        </div><hr><hr>
 
-                                <div v-else-if="config.type=='number'"><p-inputnumber :id="config.name"
-                                        v-model="config.val" mode="decimal" showButtons :min="0" :max="100" /></div>
-                            </div>
-                        </p-tabpanel>
-                        <p-tabpanel value="3">
-                            <hr>
-                            <p class="font-bold">You Configs</p>
-                            <div class="card">
-                                <p
-                                    v-for="conf in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
-                                    {{conf}}</p>
-                            </div>
-                            <hr>
-                            <hr>
-                            <p class="font-bold">Data send to Server</p>
-                            <div class="card">{{ openaibody() }}</div>
-                            <hr>
-                            <hr>
-                            <p class="font-bold">Back end data in JSON, for restore or backup</p>
-                            <div><p-textarea v-model="storage_str" rows="5" cols="40" /></div>
-                        </p-tabpanel>
-                    </p-tabpanels>
-                </p-tabs>
-            </div>
-            <p-toast />
+                        <p class="font-bold">Data send to Server</p>
+                        <div class="card">{{ openaibody() }}</div>
+                        <hr><hr>
+
+                        <p class="font-bold">Back end data in JSON, for restore or backup</p>
+                        <div><p-textarea v-model="storage_str" rows="5" cols="40" /></div>
+                    </p-tabpanel>
+                </p-tabpanels>
+            </p-tabs>
         </div>
+        <p-toast />
+    </div>
     </div>
 
     <!-- Back end storage Part -->
@@ -256,7 +281,7 @@
 
         storage.load_local_storage = () => {
             const data = localStorage.getItem('single-file-vue-chat');
-            if(data){
+            if (data) {
                 storage.loads(atob(data));
                 return true;
             }
@@ -264,7 +289,7 @@
         }
 
         storage.save_local_storage = () => {
-                    localStorage.setItem('single-file-vue-chat', btoa(storage.dumps()));
+            localStorage.setItem('single-file-vue-chat', btoa(storage.dumps()));
         }
         storage.new_chat = () => {
             const uuid = `Chat:${gen_uuid()}`;
@@ -289,7 +314,7 @@
         storage.add_img = (chat_uuid, { role, content }) => {
             const uuid = `Message:${gen_uuid()}`;
             storage.get_chat(chat_uuid).msg_uuids.push(uuid);
-            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img:true });
+            storage.set(uuid, { role: role, content: content, timestamp: get_now(), uuid: uuid, chat: chat_uuid, is_img: true });
         };
         storage.del_msg = (msg_uuid) => {
             const msg = storage.get_msg(msg_uuid);
@@ -325,7 +350,7 @@
 
         const app = createApp({
             setup() {
-                if(!storage.storage.load_local_storage()){
+                if (!storage.load_local_storage()) {
                     storage.add_chat_config('Global', 'apikey', 'sk-', 'API Key');
                     storage.firstchat();
                 }
@@ -374,9 +399,10 @@
                     const res = history_dump();
                     if (!sysp) sysp = res.messages[0]
                     res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
-                        .map(m => { return m.is_img?                            
-                            { role: m.role, content: [{type:"image_url",image_url:{url:`data:image/jpeg;base64,${m.content}`}}]}:
-                            { role: m.role, content: m.content }
+                        .map(m => {
+                            return m.is_img ?
+                                { role: m.role, content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${m.content}` } }] } :
+                                { role: m.role, content: m.content }
                         })
                     return JSON.stringify(res);
                 }
@@ -464,18 +490,18 @@
                         const preview = document.getElementById('preview');
                         const base64Data = preview.src;
                         const base64Only = base64Data.split(',')[1];
-                        storage.add_img(selected_chat.get().uuid, {role:'user',content:base64Only});
-                        preview.src="";
+                        storage.add_img(selected_chat.get().uuid, { role: 'user', content: base64Only });
+                        preview.src = "";
                     }
 
                     storage.add_msg(selected_chat.get().uuid, user_message.value);
                     openaichat();
-                    
+
                     if (image_on.value) {
                         image_on.value = false;
-                    }                    
+                    }
                     user_message.value.content = '';
-                    
+
                     if (selected_chat.get().msg_uuids.length > 10 && selected_chat.get().title.includes(selected_chat.get().uuid)) mk_title();
 
                 };
