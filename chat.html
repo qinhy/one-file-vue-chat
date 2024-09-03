@@ -39,7 +39,7 @@
             <p class="text-xl font-bold text-center px-4 py-2">
                 {{selected_chat.title}}
             </p>
-            <p-tabs value="1">                
+            <p-tabs value="1">
                 <p-tablist>
                     <p-tab v-for="(c,i) in ['Home','Chat','Config','Help']" :value="`${i}`">{{c}}</p-tab>
                 </p-tablist>
@@ -114,7 +114,6 @@
 
                             <div v-else-if="config.type=='string'"><p-inputtext :id="config.name"
                                     v-model="config.val" /></div>
-
                             <div v-else-if="config.type=='number'"><p-inputnumber :id="config.name" v-model="config.val"
                                     mode="decimal" showButtons :min="0" :max="100" /></div>
                         </div>
@@ -126,11 +125,14 @@
                             <p
                                 v-for="conf in [...storage.get_chat_configs('Global'),...storage.get_chat_configs(selected_chat.uuid)]">
                                 {{conf}}</p>
-                        </div><hr><hr>
+                        </div>
+                        <hr>
+                        <hr>
 
                         <p class="font-bold">Data send to Server</p>
                         <div class="card">{{ openaibody() }}</div>
-                        <hr><hr>
+                        <hr>
+                        <hr>
 
                         <p class="font-bold">Back end data in JSON, for restore or backup</p>
                         <div><p-textarea v-model="storage_str" rows="5" cols="40" /></div>
@@ -327,7 +329,7 @@
             return chat ? chat.msg_uuids.map(m_uuid => storage.get_msg(m_uuid)) : [];
         };
 
-        storage.add_chat_config = (chat_uuid, name, val, what) => {
+        storage.set_chat_config = (chat_uuid, name, val, what) => {
             storage.set(`Config:${chat_uuid}:${name}`, { name: name, val: val, what: what, type: typeof (val) });
             return storage.get_chat_config(chat_uuid, name);
         }
@@ -341,17 +343,17 @@
             storage.add_msg(chat.uuid, { role: 'user', content: 'hi' });
             storage.add_msg(chat.uuid, { role: 'assistant', content: "I'm ready to assist you. What do you need help with?" });
 
-            storage.add_chat_config(chat.uuid, 'sysp', 'You are a helpful assistant.', 'System Prompt');
-            storage.add_chat_config(chat.uuid, 'modelname', 'gpt-4o-mini', 'Model Name');
-            storage.add_chat_config(chat.uuid, 'sendlast', 4, 'Send last messages');
-            storage.add_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
+            storage.set_chat_config(chat.uuid, 'sysp', 'You are a helpful assistant.', 'System Prompt');
+            storage.set_chat_config(chat.uuid, 'modelname', 'gpt-4o-mini', 'Model Name');
+            storage.set_chat_config(chat.uuid, 'sendlast', 4, 'Send last messages');
+            storage.set_chat_config(chat.uuid, 'url', 'https://api.openai.com/v1/chat/completions', 'API URL');
             return chat.uuid;
         }
 
         const app = createApp({
             setup() {
                 if (!storage.load_local_storage()) {
-                    storage.add_chat_config('Global', 'apikey', 'sk-', 'API Key');
+                    storage.set_chat_config('Global', 'apikey', 'sk-', 'API Key');
                     storage.firstchat();
                 }
 
@@ -359,23 +361,45 @@
                 const selected_chat = ref(storage.all_chat()[0]);
                 selected_chat.get = () => selected_chat.value;
 
-                storage.add_chat_config('Global', 'darkmode', true, 'Darkmode');
+                storage.set_chat_config('Global', 'darkmode', true, 'Darkmode');
                 const command_darkmode = () => document.getElementsByTagName('html')[0].classList.toggle('app-dark');
                 command_darkmode();
 
+                class GreetUser {
+                    static dict() {
+                        const name = GreetUser.description().name;
+                        return { name: GreetUser.greetUser }
+                    }
+                    static description() {
+                        return {
+                            name: "greetUser",
+                            description: "Greet the user by name.",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string", description: "Name of the user" }
+                                },
+                                required: ["name"]
+                            }
+                        };
+                    }
+                    static greetUser(name) {
+                        return `Hello, ${name}! Welcome to our website.`;
+                    }
+                }
+                storage.set_chat_config('Global', 'functions', { ...GreetUser.dict() }, 'Functions');
+
                 const get_config = (name) => storage.get_chat_config(selected_chat.get()?.uuid, name)?.val;
+                const get_functions = () => {
+                    const g_functions = storage.get_chat_config('Global', 'functions').val
+                    return Object.entries(g_functions).map(e=>e[0]);
+                    // get_config('functions');
+                    // res = new Function('return {log:console.log,alert:alert}')();
+                }
 
                 const user_message = ref({ role: 'user', content: '' });
                 const ai_message = ref({ role: 'assistant', content: '' });
                 ai_message.get = () => ai_message.value;
-
-                const history_dump = () => {
-                    return {
-                        model: get_config('modelname'), stream: true,
-                        messages: [{ role: 'system', content: get_config('sysp') },
-                        ...storage.get_chat_msgs(selected_chat.get()?.uuid)?.msgs],
-                    }
-                };
 
                 const markdown_config = window.markdownit({
                     linkify: true, xhtmlOut: true, html: true, breaks: true,
@@ -397,15 +421,20 @@
                 };
 
                 const openaibody = (sysp = null) => {
-                    const res = history_dump();
-                    if (!sysp) sysp = res.messages[0]
-                    res.messages = [sysp, ...res.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
+                    const body = { model: get_config('modelname'), stream: true }
+                    body.functions = get_functions();
+                    body.function_call = "auto";
+                    body.messages = [{ role: 'system', content: get_config('sysp') },
+                    ...storage.get_chat_msgs(selected_chat.get()?.uuid)?.msgs];
+                    if (!sysp) sysp = body.messages[0];
+
+                    body.messages = [sysp, ...body.messages.filter(m => m.timestamp).slice(-parseInt(get_config('sendlast')))]
                         .map(m => {
                             return m.is_img ?
                                 { role: m.role, content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${m.content}` } }] } :
                                 { role: m.role, content: m.content }
                         })
-                    return JSON.stringify(res);
+                    return JSON.stringify(body);
                 }
 
                 const headers = () => {
@@ -514,7 +543,7 @@
                 return {
                     storage, storage_str, selected_chat, markdown_config, image_on,
                     user_message, ai_message,
-                    sendmsg, showInfo, history_repush, history_dump, openaibody, get_config, command_darkmode,
+                    sendmsg, showInfo, history_repush, openaibody, get_config, command_darkmode,
                 };
             },
         });
